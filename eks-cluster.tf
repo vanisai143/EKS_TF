@@ -7,6 +7,7 @@
 
 resource "aws_iam_role" "demo-cluster" {
   name = "terraform-eks-demo-cluster"
+  enabled_cluster_log_type = ["api", "audit", "authentication"]
 
   assume_role_policy = <<POLICY
 {
