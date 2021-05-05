@@ -1,79 +1,35 @@
-# CloudWatch configuration and Fluentd deployment
-# - Creation of 2 log group 
-# - Attach a new IAM policy to the EKS workers IAM role
-# - Generate Fluentd YAML manifest and launching 'kubectl apply' command
-
-# Log Groups
-resource "aws_cloudwatch_log_group" "log_group_containers" {
-  name              = local.log_group_containers
-  retention_in_days = var.log_retention
-  tags              = local.tags
-}
-
-resource "aws_cloudwatch_log_group" "log_group_systemd" {
-  name              = local.log_group_systemd
-  retention_in_days = var.log_retention
-  tags              = local.tags
-}
-
-# IAM Policy and attachment
-# Generate a new policy (for authorizing logging into CloudWatch)
-# Attach this policy to the EKS IAM role
-resource "random_string" "postfix" {
-  length  = 4
-  special = false
-}
-
-resource "aws_iam_policy" "policy_cloudwatch" {
-  name        = "EKSCloudWatchLogPolicy-${random_string.postfix.result}"
-  description = "This policy allow EKS workers to send logs into cloudwatch"
-
-  policy = <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Action": [
-        "logs:CreateLogStream",
-        "logs:CreateLogGroup",
-        "logs:DescribeLogGroups",
-        "logs:DescribeLogStreams",
-        "logs:PutLogEvents"
-      ],
-      "Effect": "Allow",
-      "Resource": "*"
+resource "aws_cloudwatch_metric_alarm" "cpu-high" {
+    alarm_name = "cpu-utilization-high"
+    comparison_operator = "GreaterThanOrEqualToThreshold"
+    evaluation_periods = "2"
+    metric_name = "CPUUtilization"
+    namespace = "AWS/EC2"
+    period = "60"
+    statistic = "Average"
+    threshold = "40"
+    alarm_description = "This metric monitors ec2 cpu for high utilization on agent hosts"
+    alarm_actions = [
+        aws_autoscaling_policy.agents-scale-up.arn
+    ]
+    dimensions = {
+        AutoScalingGroupName = aws_autoscaling_group.agents.name
     }
-  ]
-}
-EOF
-
 }
 
-resource "aws_iam_role_policy_attachment" "cloudwatch-role-attach" {
-  role = module.eks.worker_iam_role_name
-  policy_arn = aws_iam_policy.policy_cloudwatch.arn
-}
-
-# Generating Fluentd YAML template and applying to EKS cluster
-# EKS logs will be send to CloudWatch by this Fluentd client
-data "template_file" "fluentd_template" {
-  template = file("${path.module}/files/fluentd.tpl")
-
-  vars = {
-    region = var.region
-    cluster_name = var.cluster_name
-    log_group_containers = local.log_group_containers
-    log_group_systemd = local.log_group_systemd
-  }
-}
-
-resource "local_file" "fluentd_config" {
-  filename = "${path.module}/files/fluentd.yml"
-  content = data.template_file.fluentd_template.rendered
-
-  depends_on = [module.eks]
-
-  provisioner "local-exec" {
-    command = "kubectl --kubeconfig ${path.module}/kubeconfig_${var.cluster_name}-${terraform.workspace} apply -f ${path.module}/files/fluentd.yml"
-  }
+resource "aws_cloudwatch_metric_alarm" "cpu-low" {
+    alarm_name = "cpu-utilization-low"
+    comparison_operator = "LessThanOrEqualToThreshold"
+    evaluation_periods = "2"
+    metric_name = "CPUUtilization"
+    namespace = "AWS/EC2"
+    period = "60"
+    statistic = "Average"
+    threshold = "20"
+    alarm_description = "This metric monitors ec2 cpu for low utilization on agent hosts"
+    alarm_actions = [
+        aws_autoscaling_policy.agents-scale-down.arn
+    ]
+    dimensions = {
+        AutoScalingGroupName = aws_autoscaling_group.agents.name
+    }
 }
