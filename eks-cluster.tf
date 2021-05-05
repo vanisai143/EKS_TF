@@ -64,7 +64,7 @@ resource "aws_security_group_rule" "demo-cluster-ingress-workstation-https" {
 resource "aws_eks_cluster" "demo" {
   name     = var.cluster-name
   role_arn = aws_iam_role.demo-cluster.arn
-  enabled_cluster_log_type = ["api", "audit", "authentication"]
+  enabled_cluster_log_types = ["api", "audit", "authentication"]
 
   vpc_config {
     security_group_ids = [aws_security_group.demo-cluster.id]
